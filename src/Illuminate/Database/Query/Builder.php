@@ -1458,7 +1458,7 @@ class Builder
         $this->backupFieldsForCount($grouped);
 
         if ($grouped) {
-            $this->from = $this->raw("({$selectSql}) as subquery");
+            $this->from = $this->raw("({$selectSql}) subquery");
         }
 
         $total = $this->count($columns);
