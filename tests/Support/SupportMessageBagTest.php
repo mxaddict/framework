@@ -1,7 +1,7 @@
 <?php
 
-use Illuminate\Support\MessageBag;
 use Mockery as m;
+use Illuminate\Support\MessageBag;
 
 class SupportMessageBagTest extends PHPUnit_Framework_TestCase
 {
@@ -72,6 +72,40 @@ class SupportMessageBagTest extends PHPUnit_Framework_TestCase
         $container->add('foo', 'bar');
         $this->assertTrue($container->has('foo'));
         $this->assertFalse($container->has('bar'));
+        $this->assertTrue($container->has());
+    }
+
+    public function testHasAnyIndicatesExistence()
+    {
+        $container = new MessageBag;
+        $container->setFormat(':message');
+        $container->add('foo', 'bar');
+        $container->add('bar', 'foo');
+        $container->add('boom', 'baz');
+        $this->assertTrue($container->hasAny(['foo', 'bar']));
+        $this->assertTrue($container->hasAny(['boom', 'baz']));
+        $this->assertFalse($container->hasAny(['baz']));
+    }
+
+    public function testHasIndicatesExistenceOfAllKeys()
+    {
+        $container = new MessageBag;
+        $container->setFormat(':message');
+        $container->add('foo', 'bar');
+        $container->add('bar', 'foo');
+        $container->add('boom', 'baz');
+        $this->assertTrue($container->has(['foo', 'bar', 'boom']));
+        $this->assertFalse($container->has(['foo', 'bar', 'boom', 'baz']));
+        $this->assertFalse($container->has(['foo', 'baz']));
+    }
+
+    public function testHasIndicatesNoneExistence()
+    {
+        $container = new MessageBag;
+        $container->setFormat(':message');
+
+        $this->assertFalse($container->has('foo'));
+        $this->assertFalse($container->has());
     }
 
     public function testAllReturnsAllMessages()
@@ -123,13 +157,13 @@ class SupportMessageBagTest extends PHPUnit_Framework_TestCase
     public function testCountReturnsCorrectValue()
     {
         $container = new MessageBag;
-        $this->assertEquals(0, $container->count());
+        $this->assertCount(0, $container);
 
         $container->add('foo', 'bar');
         $container->add('foo', 'baz');
         $container->add('boom', 'baz');
 
-        $this->assertEquals(3, $container->count());
+        $this->assertCount(3, $container);
     }
 
     public function testCountable()

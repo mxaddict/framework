@@ -4,8 +4,8 @@ namespace Illuminate\Cache;
 
 use Exception;
 use Illuminate\Support\Arr;
-use Illuminate\Filesystem\Filesystem;
 use Illuminate\Contracts\Cache\Store;
+use Illuminate\Filesystem\Filesystem;
 
 class FileStore implements Store
 {
@@ -63,7 +63,9 @@ class FileStore implements Store
         // just return null. Otherwise, we'll get the contents of the file and get
         // the expiration UNIX timestamps from the start of the file's contents.
         try {
-            $expire = substr($contents = $this->files->get($path), 0, 10);
+            $expire = substr(
+                $contents = $this->files->get($path, true), 0, 10
+            );
         } catch (Exception $e) {
             return ['data' => null, 'time' => null];
         }
@@ -101,7 +103,7 @@ class FileStore implements Store
 
         $this->createCacheDirectory($path = $this->path($key));
 
-        $this->files->put($path, $value);
+        $this->files->put($path, $value, true);
     }
 
     /**
@@ -217,7 +219,7 @@ class FileStore implements Store
             return 9999999999;
         }
 
-        return $time;
+        return (int) $time;
     }
 
     /**

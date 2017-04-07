@@ -5,6 +5,19 @@ use Illuminate\Support\Collection;
 
 class SupportArrTest extends PHPUnit_Framework_TestCase
 {
+    public function testAccessible()
+    {
+        $this->assertTrue(Arr::accessible([]));
+        $this->assertTrue(Arr::accessible([1, 2]));
+        $this->assertTrue(Arr::accessible(['a' => 1, 'b' => 2]));
+        $this->assertTrue(Arr::accessible(new Collection));
+
+        $this->assertFalse(Arr::accessible(null));
+        $this->assertFalse(Arr::accessible('abc'));
+        $this->assertFalse(Arr::accessible(new stdClass));
+        $this->assertFalse(Arr::accessible((object) ['a' => 1, 'b' => 2]));
+    }
+
     public function testAdd()
     {
         $array = Arr::add(['name' => 'Desk'], 'price', 100);
@@ -28,6 +41,15 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
     {
         $array = Arr::dot(['foo' => ['bar' => 'baz']]);
         $this->assertEquals(['foo.bar' => 'baz'], $array);
+
+        $array = Arr::dot([]);
+        $this->assertEquals([], $array);
+
+        $array = Arr::dot(['foo' => []]);
+        $this->assertEquals(['foo' => []], $array);
+
+        $array = Arr::dot(['foo' => ['bar' => []]]);
+        $this->assertEquals(['foo.bar' => []], $array);
     }
 
     public function testExcept()
@@ -60,26 +82,17 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
         });
 
         $this->assertEquals(200, $value);
-    }
-
-    public function testIs()
-    {
-        $this->assertTrue(Arr::accessible([]));
-        $this->assertTrue(Arr::accessible([1, 2]));
-        $this->assertTrue(Arr::accessible(['a' => 1, 'b' => 2]));
-        $this->assertTrue(Arr::accessible(new Collection));
-
-        $this->assertFalse(Arr::accessible(null));
-        $this->assertFalse(Arr::accessible('abc'));
-        $this->assertFalse(Arr::accessible(new stdClass));
-        $this->assertFalse(Arr::accessible((object) ['a' => 1, 'b' => 2]));
+        $this->assertEquals(100, Arr::first($array));
     }
 
     public function testLast()
     {
         $array = [100, 200, 300];
-        $last = Arr::last($array, function () { return true; });
+        $last = Arr::last($array, function () {
+            return true;
+        });
         $this->assertEquals(300, $last);
+        $this->assertEquals(300, Arr::last($array));
     }
 
     public function testFlatten()
@@ -133,6 +146,9 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
 
     public function testGet()
     {
+        $array = ['products.desk' => ['price' => 100]];
+        $this->assertEquals(['price' => 100], Arr::get($array, 'products.desk'));
+
         $array = ['products' => ['desk' => ['price' => 100]]];
         $value = Arr::get($array, 'products.desk');
         $this->assertEquals(['price' => 100], $value);
@@ -178,10 +194,28 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
         $array = new ArrayObject(['foo' => null, 'bar' => new ArrayObject(['baz' => null])]);
         $this->assertNull(Arr::get($array, 'foo', 'default'));
         $this->assertNull(Arr::get($array, 'bar.baz', 'default'));
+
+        // Test null key returns the whole array
+        $array = ['foo', 'bar'];
+        $this->assertEquals($array, Arr::get($array, null));
+
+        // Test $array not an array
+        $this->assertSame('default', Arr::get(null, 'foo', 'default'));
+        $this->assertSame('default', Arr::get(false, 'foo', 'default'));
+
+        // Test $array not an array and key is null
+        $this->assertSame('default', Arr::get(null, null, 'default'));
+
+        // Test $array is empty and key is null
+        $this->assertSame([], Arr::get([], null));
+        $this->assertSame([], Arr::get([], null, 'default'));
     }
 
     public function testHas()
     {
+        $array = ['products.desk' => ['price' => 100]];
+        $this->assertTrue(Arr::has($array, 'products.desk'));
+
         $array = ['products' => ['desk' => ['price' => 100]]];
         $this->assertTrue(Arr::has($array, 'products.desk'));
         $this->assertTrue(Arr::has($array, 'products.desk.price'));
@@ -191,6 +225,28 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
         $array = ['foo' => null, 'bar' => ['baz' => null]];
         $this->assertTrue(Arr::has($array, 'foo'));
         $this->assertTrue(Arr::has($array, 'bar.baz'));
+
+        $array = new ArrayObject(['foo' => 10, 'bar' => new ArrayObject(['baz' => 10])]);
+        $this->assertTrue(Arr::has($array, 'foo'));
+        $this->assertTrue(Arr::has($array, 'bar'));
+        $this->assertTrue(Arr::has($array, 'bar.baz'));
+        $this->assertFalse(Arr::has($array, 'xxx'));
+        $this->assertFalse(Arr::has($array, 'xxx.yyy'));
+        $this->assertFalse(Arr::has($array, 'foo.xxx'));
+        $this->assertFalse(Arr::has($array, 'bar.xxx'));
+
+        $array = new ArrayObject(['foo' => null, 'bar' => new ArrayObject(['baz' => null])]);
+        $this->assertTrue(Arr::has($array, 'foo'));
+        $this->assertTrue(Arr::has($array, 'bar.baz'));
+
+        $array = ['foo', 'bar'];
+        $this->assertFalse(Arr::has($array, null));
+
+        $this->assertFalse(Arr::has(null, 'foo'));
+        $this->assertFalse(Arr::has(false, 'foo'));
+
+        $this->assertFalse(Arr::has(null, null));
+        $this->assertFalse(Arr::has([], null));
     }
 
     public function testIsAssoc()
@@ -257,6 +313,18 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
         $name = Arr::pull($array, 'name');
         $this->assertEquals('Desk', $name);
         $this->assertEquals(['price' => 100], $array);
+
+        // Only works on first level keys
+        $array = ['joe@example.com' => 'Joe', 'jane@localhost' => 'Jane'];
+        $name = Arr::pull($array, 'joe@example.com');
+        $this->assertEquals('Joe', $name);
+        $this->assertEquals(['jane@localhost' => 'Jane'], $array);
+
+        // Does not work for nested keys
+        $array = ['emails' => ['joe@example.com' => 'Joe', 'jane@localhost' => 'Jane']];
+        $name = Arr::pull($array, 'emails.joe@example.com');
+        $this->assertEquals(null, $name);
+        $this->assertEquals(['emails' => ['joe@example.com' => 'Joe', 'jane@localhost' => 'Jane']], $array);
     }
 
     public function testSet()
@@ -390,5 +458,15 @@ class SupportArrTest extends PHPUnit_Framework_TestCase
         $array = ['products' => ['desk' => ['price' => 50], null => 'something']];
         Arr::forget($array, ['products.amount.all', 'products.desk.price']);
         $this->assertEquals(['products' => ['desk' => [], null => 'something']], $array);
+
+        // Only works on first level keys
+        $array = ['joe@example.com' => 'Joe', 'jane@example.com' => 'Jane'];
+        Arr::forget($array, 'joe@example.com');
+        $this->assertEquals(['jane@example.com' => 'Jane'], $array);
+
+        // Does not work for nested keys
+        $array = ['emails' => ['joe@example.com' => ['name' => 'Joe'], 'jane@localhost' => ['name' => 'Jane']]];
+        Arr::forget($array, ['emails.joe@example.com', 'emails.jane@localhost']);
+        $this->assertEquals(['emails' => ['joe@example.com' => ['name' => 'Joe']]], $array);
     }
 }

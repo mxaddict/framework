@@ -318,7 +318,8 @@ class RoutingUrlGeneratorTest extends PHPUnit_Framework_TestCase
             $request = Request::create('http://www.foo.com:8080/')
         );
 
-        $route = new Route(['GET'], 'foo/{one}/{two?}/{three?}', ['as' => 'foo', function () {}]);
+        $route = new Route(['GET'], 'foo/{one}/{two?}/{three?}', ['as' => 'foo', function () {
+        }]);
         $routes->add($route);
 
         $this->assertEquals('http://www.foo.com:8080/foo', $url->route('foo'));
@@ -368,6 +369,8 @@ class RoutingUrlGeneratorTest extends PHPUnit_Framework_TestCase
 
         $url->getRequest()->headers->remove('referer');
         $this->assertEquals($url->to('/'), $url->previous());
+
+        $this->assertEquals($url->to('/foo'), $url->previous('/foo'));
     }
 }
 

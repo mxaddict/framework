@@ -2,6 +2,7 @@
 
 use Mockery as m;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
 class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
@@ -124,6 +125,13 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $this->assertEquals('foo', $result);
     }
 
+    public function testWithoutMethodRemovesEagerLoadedRelationshipCorrectly()
+    {
+        $model = new EloquentModelWithoutRelationStub;
+        $instance = $model->newInstance()->newQuery()->without('foo');
+        $this->assertEmpty($instance->getEagerLoads());
+    }
+
     public function testWithMethodCallsQueryBuilderCorrectlyWithArray()
     {
         $result = EloquentModelWithStub::with(['foo', 'bar']);
@@ -244,8 +252,8 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $model = $this->getMock('EloquentDateModelStub', ['getDateFormat']);
         $model->expects($this->any())->method('getDateFormat')->will($this->returnValue('Y-m-d'));
         $model->setRawAttributes([
-            'created_at'    => '2012-12-04',
-            'updated_at'    => '2012-12-05',
+            'created_at' => '2012-12-04',
+            'updated_at' => '2012-12-05',
         ]);
 
         $this->assertInstanceOf('Carbon\Carbon', $model->created_at);
@@ -257,8 +265,8 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $model = $this->getMock('EloquentDateModelStub', ['getDateFormat']);
         $model->expects($this->any())->method('getDateFormat')->will($this->returnValue('Y-m-d H:i:s'));
         $model->setRawAttributes([
-            'created_at'    => '2012-12-04',
-            'updated_at'    => time(),
+            'created_at' => '2012-12-04',
+            'updated_at' => time(),
         ]);
 
         $this->assertInstanceOf('Carbon\Carbon', $model->created_at);
@@ -690,17 +698,6 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $this->assertArrayNotHasKey('age', $array);
     }
 
-    public function testHiddenAreIgnoringWhenVisibleExists()
-    {
-        $model = new EloquentModelStub(['name' => 'foo', 'age' => 'bar', 'id' => 'baz']);
-        $model->setVisible(['name', 'id']);
-        $model->setHidden(['name', 'age']);
-        $array = $model->toArray();
-        $this->assertArrayHasKey('name', $array);
-        $this->assertArrayHasKey('id', $array);
-        $this->assertArrayNotHasKey('age', $array);
-    }
-
     public function testDynamicHidden()
     {
         $model = new EloquentModelDynamicHiddenStub(['name' => 'foo', 'age' => 'bar', 'id' => 'baz']);
@@ -718,6 +715,28 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $this->assertArrayHasKey('name', $array);
         $this->assertArrayHasKey('age', $array);
         $this->assertArrayNotHasKey('id', $array);
+    }
+
+    public function testMakeHidden()
+    {
+        $model = new EloquentModelStub(['name' => 'foo', 'age' => 'bar', 'address' => 'foobar', 'id' => 'baz']);
+        $array = $model->toArray();
+        $this->assertArrayHasKey('name', $array);
+        $this->assertArrayHasKey('age', $array);
+        $this->assertArrayHasKey('address', $array);
+        $this->assertArrayHasKey('id', $array);
+
+        $array = $model->makeHidden('address')->toArray();
+        $this->assertArrayNotHasKey('address', $array);
+        $this->assertArrayHasKey('name', $array);
+        $this->assertArrayHasKey('age', $array);
+        $this->assertArrayHasKey('id', $array);
+
+        $array = $model->makeHidden(['name', 'age'])->toArray();
+        $this->assertArrayNotHasKey('name', $array);
+        $this->assertArrayNotHasKey('age', $array);
+        $this->assertArrayNotHasKey('address', $array);
+        $this->assertArrayHasKey('id', $array);
     }
 
     public function testDynamicVisible()
@@ -810,6 +829,18 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $this->assertEquals('Taylor', $model->name);
         $this->assertTrue(Model::isUnguarded());
         Model::reguard();
+    }
+
+    public function testUnguardedCallDoesNotChangeUnguardedStateOnException()
+    {
+        try {
+            Model::unguarded(function () {
+                throw new Exception;
+            });
+        } catch (Exception $e) {
+            // ignore the exception
+        }
+        $this->assertFalse(Model::isUnguarded());
     }
 
     public function testHasOneCreatesProperRelation()
@@ -1295,6 +1326,56 @@ class DatabaseEloquentModelTest extends PHPUnit_Framework_TestCase
         $this->assertFalse($model->update());
     }
 
+    public function testIssetBehavesCorrectlyWithAttributesAndRelationships()
+    {
+        $model = new EloquentModelStub;
+        $this->assertFalse(isset($model->nonexistent));
+
+        $model->some_attribute = 'some_value';
+        $this->assertTrue(isset($model->some_attribute));
+
+        $model->setRelation('some_relation', 'some_value');
+        $this->assertTrue(isset($model->some_relation));
+    }
+
+    public function testIntKeyTypePreserved()
+    {
+        $model = $this->getMock('EloquentModelStub', ['newQueryWithoutScopes', 'updateTimestamps', 'refresh']);
+        $query = m::mock('Illuminate\Database\Eloquent\Builder');
+        $query->shouldReceive('insertGetId')->once()->with([], 'id')->andReturn(1);
+        $model->expects($this->once())->method('newQueryWithoutScopes')->will($this->returnValue($query));
+
+        $this->assertTrue($model->save());
+        $this->assertEquals(1, $model->id);
+    }
+
+    public function testStringKeyTypePreserved()
+    {
+        $model = $this->getMock('EloquentKeyTypeModelStub', ['newQueryWithoutScopes', 'updateTimestamps', 'refresh']);
+        $query = m::mock('Illuminate\Database\Eloquent\Builder');
+        $query->shouldReceive('insertGetId')->once()->with([], 'id')->andReturn('string id');
+        $model->expects($this->once())->method('newQueryWithoutScopes')->will($this->returnValue($query));
+
+        $this->assertTrue($model->save());
+        $this->assertEquals('string id', $model->id);
+    }
+
+    public function testScopesMethod()
+    {
+        $model = new EloquentModelStub;
+        $this->addMockConnection($model);
+
+        $scopes = [
+            'published',
+            'category' => 'Laravel',
+            'framework' => ['Laravel', '5.2'],
+        ];
+
+        $this->assertInstanceOf(Builder::class, $model->scopes($scopes));
+
+        $this->assertSame($scopes, $model->scopesCalled);
+    }
+
     protected function addMockConnection($model)
     {
         $model->setConnectionResolver($resolver = m::mock('Illuminate\Database\ConnectionResolverInterface'));
@@ -1318,6 +1399,7 @@ class EloquentTestObserverStub
 class EloquentModelStub extends Model
 {
     public $connection;
+    public $scopesCalled = [];
     protected $table = 'stub';
     protected $guarded = [];
     protected $morph_to_stub_type = 'EloquentModelSaveStub';
@@ -1376,6 +1458,21 @@ class EloquentModelStub extends Model
     {
         return 'appended';
     }
+
+    public function scopePublished(Builder $builder)
+    {
+        $this->scopesCalled[] = 'published';
+    }
+
+    public function scopeCategory(Builder $builder, $category)
+    {
+        $this->scopesCalled['category'] = $category;
+    }
+
+    public function scopeFramework(Builder $builder, $framework, $version)
+    {
+        $this->scopesCalled['framework'] = [$framework, $version];
+    }
 }
 
 class EloquentModelCamelStub extends EloquentModelStub
@@ -1405,6 +1502,11 @@ class EloquentModelSaveStub extends Model
     {
         $this->incrementing = $value;
     }
+}
+
+class EloquentKeyTypeModelStub extends EloquentModelStub
+{
+    protected $keyType = 'string';
 }
 
 class EloquentModelFindWithWritePdoStub extends Model
@@ -1459,6 +1561,18 @@ class EloquentModelWithStub extends Model
     }
 }
 
+class EloquentModelWithoutRelationStub extends Model
+{
+    public $with = ['foo'];
+
+    protected $guarded = [];
+
+    public function getEagerLoads()
+    {
+        return $this->eagerLoads;
+    }
+}
+
 class EloquentModelWithoutTableStub extends Model
 {
 }
@@ -1467,12 +1581,12 @@ class EloquentModelBootingTestStub extends Model
 {
     public static function unboot()
     {
-        unset(static::$booted[get_called_class()]);
+        unset(static::$booted[static::class]);
     }
 
     public static function isBooted()
     {
-        return array_key_exists(get_called_class(), static::$booted);
+        return array_key_exists(static::class, static::$booted);
     }
 }
 

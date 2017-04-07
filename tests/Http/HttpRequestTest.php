@@ -198,6 +198,10 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase
         $request = Request::create('/', 'GET', ['foo' => '', 'bar' => null]);
         $this->assertTrue($request->exists('foo'));
         $this->assertTrue($request->exists('bar'));
+
+        $request = Request::create('/', 'GET', ['foo' => ['bar' => null, 'baz' => '']]);
+        $this->assertTrue($request->exists('foo.bar'));
+        $this->assertTrue($request->exists('foo.baz'));
     }
 
     public function testHasMethod()
@@ -214,6 +218,9 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase
         //test arrays within query string
         $request = Request::create('/', 'GET', ['foo' => ['bar', 'baz']]);
         $this->assertTrue($request->has('foo'));
+
+        $request = Request::create('/', 'GET', ['foo' => ['bar' => 'baz']]);
+        $this->assertTrue($request->has('foo.bar'));
     }
 
     public function testInputMethod()
@@ -243,6 +250,12 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase
         $request = Request::create('/', 'GET', ['name' => 'Taylor', 'age' => 25]);
         $this->assertEquals(['name' => 'Taylor'], $request->except('age'));
         $this->assertEquals([], $request->except('age', 'name'));
+    }
+
+    public function testIntersectMethod()
+    {
+        $request = Request::create('/', 'GET', ['name' => 'Taylor', 'age' => null]);
+        $this->assertEquals(['name' => 'Taylor'], $request->intersect('name', 'age', 'email'));
     }
 
     public function testQueryMethod()
@@ -543,6 +556,27 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase
         $this->assertTrue($request->accepts('application/baz+json'));
     }
 
+    public function testBadAcceptHeader()
+    {
+        $request = Request::create('/', 'GET', [], [], [], ['HTTP_ACCEPT' => 'Mozilla/5.0 (Windows; U; Windows NT 5.1; pt-PT; rv:1.9.1.2) Gecko/20090729 Firefox/3.5.2 (.NET CLR 3.5.30729)']);
+        $this->assertFalse($request->accepts(['text/html', 'application/json']));
+        $this->assertFalse($request->accepts('text/html'));
+        $this->assertFalse($request->accepts('text/foo'));
+        $this->assertFalse($request->accepts('application/json'));
+        $this->assertFalse($request->accepts('application/baz+json'));
+        $this->assertFalse($request->acceptsHtml());
+        $this->assertFalse($request->acceptsJson());
+
+        // Should not be handled as regex.
+        $request = Request::create('/', 'GET', [], [], [], ['HTTP_ACCEPT' => '.+/.+']);
+        $this->assertFalse($request->accepts('application/json'));
+        $this->assertFalse($request->accepts('application/baz+json'));
+
+        // Should not produce compilation error on invalid regex.
+        $request = Request::create('/', 'GET', [], [], [], ['HTTP_ACCEPT' => '(/(']);
+        $this->assertFalse($request->accepts('text/html'));
+    }
+
     /**
      * @expectedException RuntimeException
      */
@@ -555,7 +589,9 @@ class HttpRequestTest extends PHPUnit_Framework_TestCase
     public function testUserResolverMakesUserAvailableAsMagicProperty()
     {
         $request = Request::create('/', 'GET', [], [], [], ['HTTP_ACCEPT' => 'application/json']);
-        $request->setUserResolver(function () { return 'user'; });
+        $request->setUserResolver(function () {
+            return 'user';
+        });
         $this->assertEquals('user', $request->user());
     }
 
