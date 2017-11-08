@@ -635,7 +635,11 @@ class Builder
      */
     public function getModels($columns = ['*'])
     {
-        $results = $this->query->get($columns)->all();
+        $results = $this->query->get($columns);
+
+        if (!is_array($results)) {
+            $results = $results->all();
+        }
 
         $connection = $this->model->getConnectionName();
 
