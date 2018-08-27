@@ -86,6 +86,18 @@ trait GuardHelpers
     }
 
     /**
+     * Log the user out of the application.
+     *
+     * @return void
+     */
+    public function logout()
+    {
+        $this->user = null;
+
+        return $this;
+    }
+
+    /**
      * Get the user provider used by the guard.
      *
      * @return \Illuminate\Contracts\Auth\UserProvider
